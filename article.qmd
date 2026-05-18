@@ -1,0 +1,367 @@
+---
+title: "Mejorando modelos lineales sin sacrificar interpretabilidad"
+author: "Gambetta N."
+date: today
+jupyter: py313
+format:
+  html:
+    theme:
+      light: flatly
+      dark: darkly
+    self-contained: true
+
+    toc: true
+    toc-depth: 3
+    toc-location: left
+
+    number-sections: false
+    smooth-scroll: true
+    anchor-sections: true
+
+    page-layout: article
+
+    code-fold: true
+    code-summary: "Show code"
+
+    code-copy: true
+    code-overflow: wrap
+
+    fig-width: 10
+    fig-height: 6
+    fig-align: center
+
+    warning: false
+    message: false
+
+    highlight-style: github
+
+    css: styles.css
+
+execute:
+  echo: true
+  warning: false
+  message: false
+
+editor: visual
+---
+
+------------------------------------------------------------------------
+
+*Tiempo de lectura: \~10 min · Dataset: [Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn) · Herramientas: Python, statsmodels, sklearn*
+
+------------------------------------------------------------------------
+
+## La reunión que no querés tener
+
+Imaginemos el siguiente caso: tu equipo desplegó exitosamente una regresión logística desarrollada para generar un score de crédito que refleja probabilidades de impago. El modelo funciona sin complicaiciones por varios meses desde que se desplega. Sin embargo una tarde, un agende de crédito se topa con algo poco intuitivo — un cliente que cuenta con un largo historial en la empresa el cual señala un buen comportamiento respecto a las obligaciones contraidas con la institución, a la hora de evaluar un nuevo crédito, nuestro modelo lo identifica como un cliente riesgoso.
+
+El equipo de negocios quiere respuestas. *¿Por qué el modelo devuelve un score tan alto para esta persona? ¿Se trata de un error? ¿Podemos confiar en este resultado?*
+
+Este es el precio de la interpretabilidad" que todo científico de datos acaba pagando. Y es precisamente por eso por lo que, en muchos entornos de producción, una regresión logística bien diseñada sigue superando a un conjunto de modelos de caja negra: no porque sea más precisa, sino porque *se gana la confianza*.
+
+La ceuestión interesante no es **"GLM vs XGBoost"**. Es: **"¿Hemos sacado realmente todo el partido posible a nuestro modelo lineal antes de recurrir a modelos más complejos?"**
+
+::: callout-tip
+## TL;DR
+
+Al diseñar términos de interacción a partir de un análisis exploratorio, mejoramos el AUC de una regresión logística en **aproximadamente un 2 %** con respecto a una referencia potente —y aumentamos el aumento en el 5 % superior de **2,6 veces a casi 3 veces**— sin recurrir a ninguna librería de gradient boosting.
+:::
+
+------------------------------------------------------------------------
+
+## ¿Por qué los modelos de ensamblaje basados en arboles son tan buenos?
+
+Gradient boosting y las ANN (Redes Neuronales Artificiales) suelen ser opciones asociadas a mejores métricas por una razón. De manera natural capturan al menos 3 cosas que los modelos lineales estándar no:
+
+-   **Relaciones no lineales** — entre las features y el target
+-   **Efectos tipo treshold** — (por ejemplo, un riesgo que se dispara tras un determinado periodo de permanencia)
+-   **Interacciones entre features** — donde el efecto de una variable, depende el valor que tome otra
+
+Este articulo se centra en el útlimo punto: cómo *encontrar* interacciones de una manera intuitiva e *interpretarlas* y mededirlas mediante modelos del tipo GLM, mejorando performance e insigths al mismo tiempo, invirtiendo el trade-off entre interpretabilidad y performance, y proponiendo una relación virtuosa entre ambos aspectos del desarrollo de modelos.
+
+------------------------------------------------------------------------
+
+## Setup
+
+```{python}
+# Core
+import pandas as pd
+import numpy as np
+
+# Visualization
+import matplotlib.pyplot as plt
+import seaborn as sns
+from tools import churn_numeric_analysis, interaction_effect_plot_gam, churn_interaction_matrix_marginals
+
+# Modeling
+from statsmodels.formula.api import logit
+
+# Evaluation
+from sklearn.metrics import roc_auc_score
+
+seed = 200209
+```
+
+```{python}
+data = pd.read_csv('telco-dataset.csv')
+
+# TotalCharges has a few blank strings — coerce them to NaN
+data['TotalCharges'] = pd.to_numeric(
+    data['TotalCharges'].str.strip().replace("", np.nan)
+)
+```
+
+Vamos a estar utilizando un dataset conocido: **Telco Customer Churn**. El target es binario: el cliente canceló sus contratos (`Churn = Yes`). Los datos son lo suficientemente reales como para resultar interesantes y suficientemente estructurados/poco ruidosos para facilitar una didáctica amena.
+
+------------------------------------------------------------------------
+
+## El detras de la regresión logística (muy breve)
+
+A El modelo lineal generalizado expresa la relación entre las características y la variable de respuesta mediante una función de enlace $g(\cdot)$:
+
+$$g(\mu) = \beta_0 + \beta_1 x_{1,i} + \beta_2 x_{2,i} + \cdots + \beta_k x_{k,i}$$
+
+Para una clasificación binaria, estamos usando una función de enlace logarítmica o **logit link**:
+
+$$\log\left(\frac{p}{1-p}\right) = \beta_0 + \beta_1 x_{1,i} + \cdots + \beta_k x_{k,i}$$
+
+Cada $\beta_j$ refleja el efecto *lineal* de la variable $x_j$ sobre el logaritmo de la odds ratio, lo que se traduce en un efecto *no lineal* sobre la propia probabilidad $p$. Esto está bien para los efectos principales. El problema es que una regresión logística estándar asume que el efecto de cada característica es **constante con respecto a todas las demás características**. Cuando esto no se cumple, dejamos información en la mesa.
+
+------------------------------------------------------------------------
+
+## Encontrando Interacciones mediante análisis gráfico
+
+Antes de analizar un modelo, conviene realizar un análisis visual estructurado para identificar dónde podrían darse interacciones. La pregunta clave que hay que plantearse es: **¿varía la relación entre una característica y la pérdida de clientes según los distintos subgrupos?**
+
+### Features numericas y su relación marginal con el churn
+
+```{python}
+churn_numeric_analysis(
+  data=data,
+  variable="TotalCharges",
+  figsize=(8, 4)
+)
+```
+
+Los gastos totales y la tasa de cancelación están claramente relacionados: los clientes que pagan más se dan de baja con menos frecuencia, probablemente porque han invertido en paquetes de servicios. Un coeficiente lineal reflejará esta tendencia, pero puede que no capte todos sus matices.
+
+```{python}
+churn_numeric_analysis(
+  data=data,
+  variable="tenure",
+  figsize=(8, 4)
+)
+plt.savefig(
+    "grafico.png",
+    dpi=300,
+    bbox_inches="tight"
+)
+```
+
+La antiguedad muestra una relación negativa fuerte y casi monótona con la tasa de abandono. Los clientes más recientes son mucho más propensos a darse de baja. Esta es una de las señales más útiles del conjunto de datos: nos indica exactamente *dónde* debemos centrar nuestras campañas de retención.
+
+### Vamos con la preunta clave: este efecto varía según distintos grupos?
+
+Acá es donde se pone interesante. Preguntémonos: ¿El efecto protector de tener una mayor antiguedad aplica de igual manera en todos los tipos de contrato?
+
+```{python}
+interaction_effect_plot_gam(
+  data=data,
+  x='TotalCharges',
+  group='SeniorCitizen',
+  figsize=(8, 4)
+)
+```
+
+Las curvas son claramente diferentes. Los clientes de la tercera edad muestran una *caída más pronunciada* en la probabilidad de baja a medida que aumentan los gastos totales, lo que significa que los clientes de la tercera edad con un gasto elevado son significativamente menos propensos a darse de baja que los clientes que no pertenecen a este grupo y que también tienen un gasto elevado. No se trata solo de una diferencia de nivel (que se podría gestionar con una variable dummy), sino de una *relación* genuinamente diferente.
+
+```{python}
+interaction_effect_plot_gam(
+  data=data,
+  x='tenure',
+  group='Contract',
+  figsize=(8, 4)
+)
+```
+
+Los clientes con contratos de mes a mes se comportan de una manera totalmente diferente a los que tienen contratos de uno o dos años. El efecto de permanencia —el "descuento por fidelidad"— apenas se aprecia en los abonados con contratos de mes a mes. Se concentra principalmente en los contratos a más largo plazo.
+
+::: callout-note
+## Interacción vs. Efecto principal — una distinción clave
+
+Si dos grupos tienen distintos *niveles* de tasa de anulacuión pero la misma *tendencia*, solo necesitamos el main effect capturado con una variable que tome valores $\text{{0,1}}$. Se produce una interacción cuando la **pendiente en sí misma varía** entre los grupos. Eso es lo que estamos observando aquí, y es algo que un modelo GLM estándar no captaría por sí solo.
+:::
+
+Por supuesto, las interacciones no se limitan a variables numéricas:
+
+```{python}
+
+churn_interaction_matrix_marginals(
+    data=data,
+    var1='InternetService',
+    var2='OnlineSecurity',
+    figsize=(8,4)
+)
+```
+
+Por ejemplo por elegir un caso, podemos ver que la probabilidad de abandono para los que tienen fibra óptica es de 41.9% (fila 2, columna 4). Pero si a la misma vez, la variable OnlineSecurity (vaya uno a saber que representa exactamente) toma el valor de "No", la probabilidad aumenta casi 7pp.
+
+------------------------------------------------------------------------
+
+## Incluir las interaciones en el modelo
+
+La matemática acá es directa. Si queremos modelar la interaccion entre `TotalCharges` y `SeniorCitizen`, creamos una nueva variable:
+
+$$x_{\text{charges} \times \text{senior}} = x_{\text{charges}} \cdot x_{\text{senior}}$$
+
+Y la añadimos a la formula:
+
+$$\log\left(\frac{p}{1-p}\right) = \beta_0 + \beta_{\text{charges}} x_{\text{charges}} + \beta_{\text{charges} \times \text{senior}} x_{\text{charges} \times \text{senior}} + \beta_{\text{senior}} x_{\text{senior}} + \cdots$$
+
+Cuando `SeniorCitizen = 0`, La interaccion desaparece y solo nos queda el efecto principal. Cuando `SeniorCitizen = 1`, el coeficiente efectivo para cargos totales incluye dos componentes $\beta_{\text{charges}} + \beta_{\text{charges} \times \text{senior}}$
+
+Nótese que casi siempre necesitamos el **efecto principal** junto con la interacción. Sin él, el modelo no puede distinguir entre un cambio en el nivel y un cambio en la pendiente.
+
+------------------------------------------------------------------------
+
+## Comprobando el impacto de las interacciones en la perforamance
+
+### Baseline: Solo los efectos principales
+
+```{python}
+# tipos de datos para evitar errores
+data['Contract'] = data['Contract'].astype('object')
+data['Churn_int'] = (data['Churn'] == "Yes").astype("Int64")
+data = data[data['TotalCharges'].notna()].copy()
+
+# features analizadas
+features = ['SeniorCitizen', 'tenure', 'Contract', 'TotalCharges']
+
+fmla1 = 'Churn_int ~ ' + ' + '.join(features)
+
+lg1 = logit(fmla1, data[features + ['Churn_int']]).fit(disp=False)
+
+# performance medida con AUC
+y = data['Churn_int']
+y_pred_lg1 = lg1.predict(data)
+auc_lg1 = roc_auc_score(y, y_pred_lg1)
+
+# Top 5% Lift
+eval_df = pd.DataFrame({'y_true': y, 'score': y_pred_lg1}).sort_values('score', ascending=False)
+top_n = int(len(eval_df) * 0.05)
+global_rate = eval_df['y_true'].mean()
+top5_rate = eval_df.head(top_n)['y_true'].mean()
+lift_5 = top5_rate / global_rate
+
+print(f"AUC (baseline):      {auc_lg1:.4f}")
+print(f"Global churn rate:   {global_rate:.4f}")
+print(f"Top-5% churn rate:   {top5_rate:.4f}")
+print(f"Top-5% Lift:         {lift_5:.2f}x")
+```
+
+A solid start. An AUC above 0.80 means the model already separates churners from non-churners reasonably well.
+
+### Modelo mejorado: efectos principales + interacciones
+
+Añadimos las interacciones hayada mediante un análisis gráfico:
+
+```{python}
+# Interaction features
+data['monthly_contract_charges'] = (
+    data['MonthlyCharges'] *
+    (data['Contract'] == 'Month-to-month').astype(int)
+)
+
+data['fiber_no_support'] = (
+    (data['InternetService'] == 'Fiber optic').astype(int) *
+    (data['TechSupport'] == 'No').astype(int)
+)
+
+data['fiber_no_security'] = (
+    (data['InternetService'] == 'Fiber optic').astype(int) *
+    (data['OnlineSecurity'] == 'No').astype(int)
+)
+
+data['senior_high_price'] = (
+    data['SeniorCitizen'] * data['MonthlyCharges']
+)
+
+data['auto_payment'] = (
+    (data['PaperlessBilling'] == 'Yes').astype(int) *
+    (data['PaymentMethod'].isin([
+        'Bank transfer (automatic)',
+        'Credit card (automatic)'
+    ])).astype(int)
+)
+
+# Formula con interacciones
+fmla2 = (
+    fmla1
+    + ' + tenure:Contract'
+    + ' + TotalCharges:SeniorCitizen'
+    + ' + monthly_contract_charges'
+    + ' + fiber_no_support'
+    + ' + fiber_no_security'
+    + ' + senior_high_price'
+    + ' + auto_payment'
+)
+
+lg2 = logit(fmla2, data).fit(disp=False)
+y_pred_lg2 = lg2.predict(data)
+auc_lg2 = roc_auc_score(y, y_pred_lg2)
+
+# Top 5% Lift
+eval_df2 = pd.DataFrame({'y_true': y, 'score': y_pred_lg2}).sort_values('score', ascending=False)
+top5_rate_2 = eval_df2.head(top_n)['y_true'].mean()
+lift_5_2 = top5_rate_2 / global_rate
+
+print(f"AUC (with interactions): {auc_lg2:.4f}")
+print(f"AUC improvement:         {(auc_lg2 - auc_lg1) / auc_lg1:.2%}")
+print(f"Global churn rate:       {global_rate:.4f}")
+print(f"Top-5% churn rate:       {top5_rate_2:.4f}")
+print(f"Top-5% Lift:             {lift_5_2:.2f}x")
+```
+
+### Resumen modelo con interacciones
+
+```{python}
+lg2.summary()
+```
+
+------------------------------------------------------------------------
+
+## Intepretando los resultados
+
+Podemos decir que conseguimos lo siguiente:
+
+::: callout-important
+## Resultados Clave
+
+-   **El AUC mejora en un 2,2 %** partiendo de una referencia ya sólida, sin datos nuevos, solo con un mejor uso de las características existentes.
+-   **El lift en el 5 % superior pasó de 2,6 veces a casi 3 veces**: entre los clientes clasificados por el modelo como los de mayor probabilidad de churn, la tasa observada es ahora casi tres veces superior a la media de la población. En una campaña real, eso supone una mejora significativa en la eficiencia de la segmentación.
+-   Todos los coeficientes de `lg2.summary()` siguen siendo interpretables. Podemos explicar a un responsable de negocio *exactamente* por qué un cliente de fibra óptica sin funciones de seguridad obtiene una puntuación más alta: existe un coeficiente con signo, estadísticamente comprobable, para esa combinación.
+:::
+
+Este último punto es lo que hace que el enfoque sea realmente diferente a la simple oposición de un LightGBM sobre la regresión logística. Hemos mejorado el rendimiento *y* hemos mantenido el modelo abierto al escrutinio.
+
+------------------------------------------------------------------------
+
+## Takeaways
+
+La idea generalizada en el aprendizaje automático —que hay que elegir entre interpretabilidad y rendimiento— solo es cierta si el desarrollo de modelos implica pasar de modelos mas sencillos y clásicos, a modelos cada vez mas oscuros y complejos.
+
+Algunos principios prácticos que se pueden extraer de esto:
+
+1.  **El análisis exploratorio no es opcional.** Trazar distribuciones condicionales por subgrupos es la forma de encontrar interacciones que merezca la pena modelar. Herramientas como los modelos GAM o los gráficos de dependencia parcial pueden ser útiles en casos de dimensiones más altas.
+
+2.  **Un término de interacción no es más que una nueva característica.** No hay ningún misterio. Es el producto de dos variables y proporciona al modelo una pendiente independiente para un subgrupo específico.
+
+3.  **Incluir siempre los efectos principales** Una interacción sin sus efectos principales constituyentes suele estar mal especificada y es más difícil de interpretar.
+
+4.  **El conocimiento sobre el negocio funciona como brujula** Las interacciones que encontramos —fibra óptica + sin seguridad, personas mayores + cuotas mensuales elevadas— tienen sentido desde el punto de vista de negocio. Esa alineación entre la señal estadística y la lógica de negocio es una señal de que estás modelando algo real, no un ruido de sobreajuste.
+
+La próxima vez que alguien sugiera pasar directamente a XGBoost porque "la regresión logística no es lo suficientemente potente", invitalo a representar gráficamente los efectos de interacción. Es probable que el modelo lineal aún tenga margen de mejora.
+
+------------------------------------------------------------------------
+
+*Todo el código utilizado en este análisis está disponible en el repositorio cuyo enlace figura más arriba. El conjunto de datos está disponible públicamente en Kaggle en la ficha [Telco Customer Churn](https://www.kaggle.com/datasets/blastchar/telco-customer-churn).*
