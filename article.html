@@ -2512,7 +2512,7 @@ window.Quarto = {
 </section>
 <section id="setup" class="level2">
 <h2 class="anchored" data-anchor-id="setup">Setup</h2>
-<div id="93990e3b" class="cell" data-execution_count="1">
+<div id="0efd0455" class="cell" data-execution_count="1">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Core</span></span>
@@ -2533,7 +2533,7 @@ window.Quarto = {
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>seed <span class="op">=</span> <span class="dv">200209</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 </details>
 </div>
-<div id="46da204b" class="cell" data-execution_count="2">
+<div id="ee3b6628" class="cell" data-execution_count="2">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>data <span class="op">=</span> pd.read_csv(<span class="st">&#39;telco-dataset.csv&#39;</span>)</span>
@@ -2561,7 +2561,7 @@ window.Quarto = {
 <p>Antes de analizar un modelo, conviene realizar un análisis visual estructurado para identificar dónde podrían darse interacciones. La pregunta clave que hay que plantearse es: <strong>¿varía la relación entre una característica y la pérdida de clientes según los distintos subgrupos?</strong></p>
 <section id="features-numericas-y-su-relación-marginal-con-el-churn" class="level3">
 <h3 class="anchored" data-anchor-id="features-numericas-y-su-relación-marginal-con-el-churn">Features numericas y su relación marginal con el churn</h3>
-<div id="d23015a6" class="cell" data-execution_count="3">
+<div id="6eb8a032" class="cell" data-execution_count="3">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb3"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>churn_numeric_analysis(</span>
@@ -2579,7 +2579,7 @@ window.Quarto = {
 </div>
 </div>
 <p>Los gastos totales y la tasa de cancelación están claramente relacionados: los clientes que pagan más se dan de baja con menos frecuencia, probablemente porque han invertido en paquetes de servicios. Un coeficiente lineal reflejará esta tendencia, pero puede que no capte todos sus matices.</p>
-<div id="2e9fcadb" class="cell" data-execution_count="4">
+<div id="490ba7a9" class="cell" data-execution_count="4">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>churn_numeric_analysis(</span>
@@ -2609,7 +2609,7 @@ window.Quarto = {
 <section id="vamos-con-la-preunta-clave-este-efecto-varía-según-distintos-grupos" class="level3">
 <h3 class="anchored" data-anchor-id="vamos-con-la-preunta-clave-este-efecto-varía-según-distintos-grupos">Vamos con la preunta clave: este efecto varía según distintos grupos?</h3>
 <p>Acá es donde se pone interesante. Preguntémonos: ¿El efecto protector de tener una mayor antiguedad aplica de igual manera en todos los tipos de contrato?</p>
-<div id="a73529f1" class="cell" data-execution_count="5">
+<div id="221f780b" class="cell" data-execution_count="5">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>interaction_effect_plot_gam(</span>
@@ -2628,7 +2628,7 @@ window.Quarto = {
 </div>
 </div>
 <p>Las curvas son claramente diferentes. Los clientes de la tercera edad muestran una <em>caída más pronunciada</em> en la probabilidad de baja a medida que aumentan los gastos totales, lo que significa que los clientes de la tercera edad con un gasto elevado son significativamente menos propensos a darse de baja que los clientes que no pertenecen a este grupo y que también tienen un gasto elevado. No se trata solo de una diferencia de nivel (que se podría gestionar con una variable dummy), sino de una <em>relación</em> genuinamente diferente.</p>
-<div id="5576de88" class="cell" data-execution_count="6">
+<div id="0dec7609" class="cell" data-execution_count="6">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb7"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>interaction_effect_plot_gam(</span>
@@ -2661,7 +2661,7 @@ window.Quarto = {
 </div>
 </div>
 <p>Por supuesto, las interacciones no se limitan a variables numéricas:</p>
-<div id="84c04a47" class="cell" data-execution_count="7">
+<div id="128ddac7" class="cell" data-execution_count="7">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>churn_interaction_matrix_marginals(</span>
@@ -2697,7 +2697,7 @@ window.Quarto = {
 <h2 class="anchored" data-anchor-id="comprobando-el-impacto-de-las-interacciones-en-la-perforamance">Comprobando el impacto de las interacciones en la perforamance</h2>
 <section id="baseline-solo-los-efectos-principales" class="level3">
 <h3 class="anchored" data-anchor-id="baseline-solo-los-efectos-principales">Baseline: Solo los efectos principales</h3>
-<div id="ef1d81a7" class="cell" data-execution_count="8">
+<div id="d40fc1c5" class="cell" data-execution_count="8">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb9"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="co"># tipos de datos para evitar errores</span></span>
@@ -2741,7 +2741,7 @@ Top-5% Lift:         2.65x</code></pre>
 <section id="modelo-mejorado-efectos-principales-interacciones" class="level3">
 <h3 class="anchored" data-anchor-id="modelo-mejorado-efectos-principales-interacciones">Modelo mejorado: efectos principales + interacciones</h3>
 <p>Añadimos las interacciones hayada mediante un análisis gráfico:</p>
-<div id="e15124f2" class="cell" data-execution_count="9">
+<div id="8bb67ebc" class="cell" data-execution_count="9">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb11"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Interaction features</span></span>
@@ -2810,7 +2810,7 @@ Top-5% Lift:             2.97x</code></pre>
 </section>
 <section id="resumen-modelo-con-interacciones" class="level3">
 <h3 class="anchored" data-anchor-id="resumen-modelo-con-interacciones">Resumen modelo con interacciones</h3>
-<div id="a9825476" class="cell" data-execution_count="10">
+<div id="bf048d7f" class="cell" data-execution_count="10">
 <details class="code-fold">
 <summary>Show code</summary>
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb13"><pre class="sourceCode python code-with-copy"><code class="sourceCode python"><span id="cb13-1"><a href="#cb13-1" aria-hidden="true" tabindex="-1"></a>lg2.summary()</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
@@ -2845,7 +2845,7 @@ Top-5% Lift:             2.97x</code></pre>
 </tr>
 <tr class="odd">
 <th data-quarto-table-cell-role="th">Time:</th>
-<td>22:55:15</td>
+<td>23:36:28</td>
 <th data-quarto-table-cell-role="th">Log-Likelihood:</th>
 <td>-2987.2</td>
 </tr>
